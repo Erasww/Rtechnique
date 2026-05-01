@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Barbell curl Rep Check</title>
+    <title>Barbell Curl Rep Check</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -16,9 +16,7 @@
             align-items: center;
         }
 
-        video {
-            display: none;
-        }
+        video { display: none; }
 
         canvas {
             display: block;
@@ -46,6 +44,8 @@
             gap: 12px;
             flex-wrap: wrap;
             justify-content: center;
+            width: 100%;
+            max-width: 960px;
         }
 
         button {
@@ -57,244 +57,330 @@
             cursor: pointer;
         }
 
-        button:hover {
-            background: #f97316;
+        button:hover { background: #f97316; }
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        /* ── Feedback box ── */
+        #feedback-box {
+            width: 100%;
+            max-width: 960px;
+            margin-top: 16px;
+            min-height: 70px;
         }
 
-        button:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
+        .feedback-card {
+            border: 1px solid #f7c8a9;
+            border-radius: 10px;
+            padding: 14px 18px;
+            background: #ffffff;
         }
+
+        .feedback-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .feedback-grade { font-weight: 700; font-size: 15px; }
+        .feedback-meta  { font-size: 12px; opacity: 0.6; }
+        .feedback-text  { margin: 0; font-size: 14px; line-height: 1.5; }
+
+        .feedback-loading {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            opacity: 0.7;
+        }
+
+        .spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid #dc2626;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            display: inline-block;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .feedback-error { font-size: 13px; color: #dc2626; padding: 10px 0; }
     </style>
 </head>
 <body>
+
     <video id="webcam" autoplay playsinline></video>
     <canvas id="output"></canvas>
 
     <div id="feedback">Waiting...</div>
+
     <div class="controls">
         <button id="startButton" type="button">Start</button>
         <button id="stopButton" type="button" disabled>Stop</button>
     </div>
 
+    <!-- ✅ feedback-box is HERE — outside controls, full width, below buttons -->
+    <div id="feedback-box"></div>
+
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
     <script>
-const video = document.getElementById("webcam");
-const canvas = document.getElementById("output");
-const ctx = canvas.getContext("2d");
-const feedback = document.getElementById("feedback");
-const startButton = document.getElementById("startButton");
-const stopButton = document.getElementById("stopButton");
-let camera = null;
 
-if (typeof Pose === "undefined" || typeof Camera === "undefined") {
-  feedback.innerText = "Camera tools did not load. Check your internet.";
+// ── n8n webhook ──────────────────────────────────────────────
+const N8N_WEBHOOK = "https://yerasamb.app.n8n.cloud/webhook/log-set";
+
+function getUserId() {
+    let id = localStorage.getItem("rt_user_id");
+    if (!id) {
+        id = "user_" + Math.random().toString(36).slice(2, 10);
+        localStorage.setItem("rt_user_id", id);
+    }
+    return id;
 }
 
+async function sendSetToN8N(exercise, reps, formScore) {
+    const box = document.getElementById("feedback-box");
+    box.innerHTML = `<div class="feedback-loading"><span class="spinner"></span> Analyzing your set…</div>`;
+
+    const payload = {
+        userId:    getUserId(),
+        exercise:  exercise,
+        reps:      reps,
+        formScore: Math.round(formScore),
+        timestamp: new Date().toISOString()
+    };
+
+    try {
+        const res = await fetch(N8N_WEBHOOK, {
+            method:  "POST",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify(payload)
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const data = await res.json();
+
+        const gradeColor = {
+            Excellent: "#1D9E75",
+            Good:      "#378ADD",
+            Fair:      "#EF9F27",
+            Poor:      "#dc2626"
+        };
+        const color = gradeColor[data.grade] || "#888";
+
+        box.innerHTML = `
+            <div class="feedback-card">
+                <div class="feedback-header">
+                    <span class="feedback-grade" style="color:${color}">${data.grade || "Done"}</span>
+                    <span class="feedback-meta">${reps} reps · Form ${Math.round(formScore)}%</span>
+                </div>
+                <p class="feedback-text">${data.feedback || "Great set — keep it up!"}</p>
+            </div>`;
+
+    } catch (err) {
+        box.innerHTML = `<div class="feedback-error">Could not get feedback: ${err.message}</div>`;
+        console.error("[n8n]", err);
+    }
+}
+
+// ── Camera & Pose ────────────────────────────────────────────
+const video       = document.getElementById("webcam");
+const canvas      = document.getElementById("output");
+const ctx         = canvas.getContext("2d");
+const feedback    = document.getElementById("feedback");
+const startButton = document.getElementById("startButton");
+const stopButton  = document.getElementById("stopButton");
+let camera = null;
+
 const pose = new Pose({
-  locateFile: (file) =>
-    `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
 });
 
 pose.setOptions({
-  modelComplexity: 1,
-  smoothLandmarks: true,
-  enableSegmentation: false,
-  minDetectionConfidence: 0.5,
-  minTrackingConfidence: 0.5
+    modelComplexity: 1,
+    smoothLandmarks: true,
+    enableSegmentation: false,
+    minDetectionConfidence: 0.5,
+    minTrackingConfidence: 0.5
 });
 
 pose.onResults(onResults);
 
 function startCamera() {
-  feedback.innerText = "Starting camera...";
-  startButton.disabled = true;
-  stopButton.disabled = false;
+    feedback.innerText = "Starting camera...";
+    startButton.disabled = true;
+    stopButton.disabled  = false;
 
-  if (camera) {
-    camera.stop();
-  }
+    // Reset stats for new set
+    reps = 0;
+    goodFrames = 0;
+    totalFrames = 0;
+    stage = "down";
+    smoothAngle = null;
+    prevElbowY = null;
 
-  camera = new Camera(video, {
-    onFrame: async () => {
-      await pose.send({ image: video });
-    },
-    width: 960,
-    height: 720
-  });
+    document.getElementById("feedback-box").innerHTML = "";
 
-  camera.start().catch(() => {
-    feedback.innerText = "Camera did not start. Please allow camera access.";
-    startButton.disabled = false;
-    stopButton.disabled = true;
-  });
+    if (camera) camera.stop();
+
+    camera = new Camera(video, {
+        onFrame: async () => { await pose.send({ image: video }); },
+        width: 960,
+        height: 720
+    });
+
+    camera.start().catch(() => {
+        feedback.innerText = "Camera did not start. Please allow camera access.";
+        startButton.disabled = false;
+        stopButton.disabled  = true;
+    });
 }
 
 function stopCamera() {
-  if (camera) {
-    camera.stop();
-    camera = null;
-  }
+    if (camera) { camera.stop(); camera = null; }
+    if (video.srcObject) {
+        video.srcObject.getTracks().forEach(t => t.stop());
+        video.srcObject = null;
+    }
 
-  if (video.srcObject) {
-    video.srcObject.getTracks().forEach((track) => track.stop());
-    video.srcObject = null;
-  }
+    startButton.disabled = false;
+    stopButton.disabled  = true;
+    feedback.innerText   = `Stopped | Reps: ${reps}`;
 
-  startButton.disabled = false;
-  stopButton.disabled = true;
-  feedback.innerText = `Stopped | Reps: ${reps}`;
+    // ✅ Calculate form score from this set, then send to n8n
+    const formScore = totalFrames > 0 ? Math.round((goodFrames / totalFrames) * 100) : 0;
+    sendSetToN8N("barbell_curl", reps, formScore);
 }
 
+// ── Rep counting logic ───────────────────────────────────────
 function calculateAngle(a, b, c) {
-  const ab = [a.x - b.x, a.y - b.y];
-  const cb = [c.x - b.x, c.y - b.y];
-
-  const dot = ab[0]*cb[0] + ab[1]*cb[1];
-  const magAB = Math.sqrt(ab[0]**2 + ab[1]**2);
-  const magCB = Math.sqrt(cb[0]**2 + cb[1]**2);
-
-  if (magAB === 0 || magCB === 0) return 0;
-
-  const cosine = Math.max(-1, Math.min(1, dot / (magAB * magCB)));
-  const angle = Math.acos(cosine);
-  return angle * (180 / Math.PI);
+    const ab = [a.x - b.x, a.y - b.y];
+    const cb = [c.x - b.x, c.y - b.y];
+    const dot = ab[0]*cb[0] + ab[1]*cb[1];
+    const magAB = Math.sqrt(ab[0]**2 + ab[1]**2);
+    const magCB = Math.sqrt(cb[0]**2 + cb[1]**2);
+    if (magAB === 0 || magCB === 0) return 0;
+    const cosine = Math.max(-1, Math.min(1, dot / (magAB * magCB)));
+    return Math.acos(cosine) * (180 / Math.PI);
 }
 
-// for form control
 let prevElbowY = null;
-
-const TOP_ANGLE = 155;
-const BOTTOM_ANGLE = 85;
-const MIN_VISIBILITY = 0.55;
-const SMOOTHING = 0.18;
+const MIN_VISIBILITY  = 0.55;
+const SMOOTHING       = 0.18;
 const REQUIRED_FRAMES = 4;
 const REP_COOLDOWN_MS = 900;
 
-let stage = "down";
-let reps = 0;
-let smoothAngle = null;
-let stickyMessage = "";
+let stage              = "down";
+let reps               = 0;
+let smoothAngle        = null;
+let stickyMessage      = "";
 let stickyMessageUntil = 0;
-let topFrames = 0;
-let bottomFrames = 0;
-let lastRepTime = 0;
-let lowestAngleThisRep = 180;
+let topFrames          = 0;
+let bottomFrames       = 0;
+let lastRepTime        = 0;
+
+// ✅ Track good vs total frames for form score calculation
+let goodFrames  = 0;
+let totalFrames = 0;
 
 function isVisible(...points) {
-  return points.every((point) => (point.visibility ?? 1) >= MIN_VISIBILITY);
+    return points.every(p => (p.visibility ?? 1) >= MIN_VISIBILITY);
 }
 
 function updateSmoothAngle(angle) {
-  if (smoothAngle === null) {
-    smoothAngle = angle;
-  } else {
-    smoothAngle = smoothAngle + (angle - smoothAngle) * SMOOTHING;
-  }
-
-  return smoothAngle;
+    smoothAngle = smoothAngle === null ? angle : smoothAngle + (angle - smoothAngle) * SMOOTHING;
+    return smoothAngle;
 }
 
-function showMessage(message, duration = 1200) {
-  stickyMessage = message;
-  stickyMessageUntil = Date.now() + duration;
+function showMessage(msg, duration = 1200) {
+    stickyMessage      = msg;
+    stickyMessageUntil = Date.now() + duration;
 }
 
 function onResults(results) {
-  canvas.width = video.videoWidth || 960;
-  canvas.height = video.videoHeight || 720;
-  ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+    canvas.width  = video.videoWidth  || 960;
+    canvas.height = video.videoHeight || 720;
+    ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
 
-  if (!results.poseLandmarks) {
-    feedback.innerText = `Reps: ${reps} | Move into the camera view`;
-    return;
-  }
-
-  const lm = results.poseLandmarks;
-
-  // Right arm
-  const shoulder = lm[12];
-  const elbow = lm[14];
-  const wrist = lm[16];
-
-  if (!isVisible(shoulder, elbow, wrist)) {
-    feedback.innerText = `Reps: ${reps} | Show your full right arm`;
-    return;
-  }
-
-  const angle = updateSmoothAngle(calculateAngle(shoulder, elbow, wrist));
-
-  let message = "";
-
-  // --- REP LOGIC (stable + anti-cheat) ---
-  if (angle < 60 && stage === "down") {
-    stage = "up";
-    topFrames = 0;
-  }
-
-  if (stage === "up") {
-    if (angle < 60) topFrames++;
-
-    if (topFrames >= REQUIRED_FRAMES) {
-      showMessage("Top position 💪", 600);
+    if (!results.poseLandmarks) {
+        feedback.innerText = `Reps: ${reps} | Move into the camera view`;
+        return;
     }
-  }
 
-  if (angle > 150 && stage === "up") {
-    bottomFrames++;
+    const lm       = results.poseLandmarks;
+    const shoulder = lm[12];
+    const elbow    = lm[14];
+    const wrist    = lm[16];
 
-    if (bottomFrames >= REQUIRED_FRAMES) {
-      const now = Date.now();
-
-      if (now - lastRepTime > REP_COOLDOWN_MS) {
-        reps++;
-        lastRepTime = now;
-        showMessage("Good rep ✅", 1000);
-      }
-
-      stage = "down";
-      bottomFrames = 0;
-      topFrames = 0;
+    if (!isVisible(shoulder, elbow, wrist)) {
+        feedback.innerText = `Reps: ${reps} | Show your full right arm`;
+        return;
     }
-  } else {
-    bottomFrames = 0;
-  }
 
-  // --- RANGE CHECK ---
-  if (angle > 100 && angle < 150 && stage === "up") {
-    message = "Curl higher";
-  }
+    const angle = updateSmoothAngle(calculateAngle(shoulder, elbow, wrist));
+    totalFrames++;
 
-  if (angle < 40) {
-    message = "Too tight / overcurl ⚠️";
-  }
+    let message   = "";
+    let frameGood = true;
 
-  // --- SWING DETECTION (KEY FEATURE) ---
-  if (prevElbowY !== null) {
-    const movement = Math.abs(elbow.y - prevElbowY);
+    // Rep logic
+    if (angle < 60 && stage === "down") { stage = "up"; topFrames = 0; }
 
-    if (movement > 0.015) {
-      message = "Keep elbow still ❌ (no swinging)";
+    if (stage === "up") {
+        if (angle < 60) topFrames++;
+        if (topFrames >= REQUIRED_FRAMES) showMessage("Top position", 600);
     }
-  }
 
-  prevElbowY = elbow.y;
+    if (angle > 150 && stage === "up") {
+        bottomFrames++;
+        if (bottomFrames >= REQUIRED_FRAMES) {
+            const now = Date.now();
+            if (now - lastRepTime > REP_COOLDOWN_MS) {
+                reps++;
+                lastRepTime = now;
+                showMessage("Good rep", 1000);
+            }
+            stage = "down"; bottomFrames = 0; topFrames = 0;
+        }
+    } else {
+        bottomFrames = 0;
+    }
 
-  // --- STICKY MESSAGE (priority feedback) ---
-  if (Date.now() < stickyMessageUntil) {
-    message = stickyMessage;
-  }
+    // Range check
+    if (angle > 100 && angle < 150 && stage === "up") {
+        message   = "Curl higher";
+        frameGood = false;
+    }
 
-  // --- DISPLAY ---
-  feedback.innerText = `Reps: ${reps} | ${message}`;
+    if (angle < 40) {
+        message   = "Too tight / overcurl";
+        frameGood = false;
+    }
+
+    // Swing detection
+    if (prevElbowY !== null) {
+        const movement = Math.abs(elbow.y - prevElbowY);
+        if (movement > 0.015) {
+            message   = "Keep elbow still — no swinging";
+            frameGood = false;
+        }
+    }
+    prevElbowY = elbow.y;
+
+    if (frameGood) goodFrames++;
+
+    // Sticky message priority
+    if (Date.now() < stickyMessageUntil) message = stickyMessage;
+
+    feedback.innerText = `Reps: ${reps} | ${message || "Good form"}`;
 }
 
 startButton.addEventListener("click", startCamera);
-stopButton.addEventListener("click", stopCamera);
-if (stopCamera) {
-    sendSetToN8N("barbel-curles", reps, formScore);
-  }
-</script>
+stopButton.addEventListener("click",  stopCamera);
+
+    </script>
 </body>
 </html>
