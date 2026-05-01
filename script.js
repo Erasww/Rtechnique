@@ -187,6 +187,7 @@ const exercises = [
   {
     id: 8, name: "Lateral Raises", category: "shoulders", difficulty: "beginner",
     video: "3VcKaXpzqRo",
+    formCheck: "lateral_raises.html",
     equipment: "Dumbbell", primaryMuscles: ["Side Shoulder"],
     secondaryMuscles: ["Front Shoulder", "Small Shoulder Muscle"],
     desc: "A shoulder exercise. Use light weight and good control.",
@@ -213,6 +214,7 @@ const exercises = [
   {
     id: 9, name: "Barbell Curl", category: "arms", difficulty: "beginner",
     video: "kwG2ipFRgfo",
+    formCheck: "barbell_curl.html",
     equipment: "Barbell", primaryMuscles: ["Biceps"],
     secondaryMuscles: ["Forearms", "Lower Arm"],
     desc: "A simple arm exercise. It helps build your biceps.",
@@ -433,6 +435,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModalDi
 // ── PLAN GENERATION ──
 async function generatePlan() {
   const name = document.getElementById('userName').value.trim() || 'Athlete';
+  const email = document.getElementById("email").value;
   const weight = parseFloat(document.getElementById('weight').value);
   const height = parseFloat(document.getElementById('height').value);
   const age = parseInt(document.getElementById('age').value);
@@ -442,80 +445,40 @@ async function generatePlan() {
   const goal = document.querySelector('input[name="goal"]:checked').value;
 
   if (!weight || !height || !age) {
-    alert('Please fill in your weight, height, and age.');
+    alert('Fill all fields');
     return;
   }
 
   const btn = document.getElementById('generateBtn');
   btn.disabled = true;
-  document.getElementById('planPlaceholder').style.display = 'none';
-  document.getElementById('planResult').classList.remove('visible');
-  document.getElementById('loadingState').classList.add('visible');
-
-  const bmi = (weight / ((height/100) ** 2)).toFixed(1);
-  let bmrBase = gender === 'male'
-    ? 88.36 + (13.4 * weight) + (4.8 * height) - (5.7 * age)
-    : 447.6 + (9.2 * weight) + (3.1 * height) - (4.3 * age);
-  const tdee = Math.round(bmrBase * 1.55);
-  
-  const goalLabels = { muscle: 'Build Muscle', fat_loss: 'Lose Fat', endurance: 'Get Fit' };
-
-  const prompt = `You are a gym coach. Create a clear gym training plan. Use simple A2-B1 English. Use short sentences and common words.
-
-ATHLETE PROFILE:
-- Name: ${name}
-- Weight: ${weight}kg, Height: ${height}cm, Age: ${age}
-- Gender: ${gender}
-- BMI: ${bmi}
-- Estimated TDEE: ${tdee} kcal/day
-- Experience: ${experience}
-- Goal: ${goalLabels[goal]}
-- Days/week: ${daysPerWeek}
-
-Answer ONLY with a JSON object (no markdown, no backticks) with this exact structure:
-{
-  "bmi_category": "string",
-  "weekly_calories": number,
-  "protein_g": number,
-  "sessions_per_week": number,
-  "program_type": "string (e.g. Upper and Lower Plan)",
-  "coach_note": "2 short simple sentences for the athlete",
-  "weekly_plan": [
-    {
-      "day": "Monday",
-      "focus": "e.g. Upper Body Push",
-      "rest": false,
-      "exercises": [
-        {"name": "Bench Press", "sets": 4, "reps": "6-8", "rest_sec": 120, "note": "brief form cue"}
-      ]
-    }
-  ]
-}
-
-Include all ${daysPerWeek} training days plus rest days to fill 7 days. Make the plan good for a ${experience} with the goal of ${goalLabels[goal]}. Notes must use easy A2-B1 words.`;
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    // 👉 STEP 1: generate fake plan (or your AI plan)
+    const plan = getFallbackPlan(experience, daysPerWeek, goal);
+
+    // 👉 STEP 2: render UI FIRST
+    renderPlan(name, weight, height, "ok", 2000, goal, {}, plan);
+
+    // 👉 STEP 3: send to n8n AFTER plan exists
+    await fetch("https://yerasamb.app.n8n.cloud/webhook/create-plan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1000,
-        messages: [{ role: "user", content: prompt }]
+        name,
+        email,
+        goal,
+        level: experience,
+        days_per_week: daysPerWeek,
+        weekly_plan: plan.weekly_plan
       })
     });
 
-    const data = await response.json();
-    const text = data.content.map(i => i.text || '').join('');
-    const clean = text.replace(/```json|```/g, '').trim();
-    const plan = JSON.parse(clean);
-    renderPlan(name, weight, height, bmi, tdee, goal, goalLabels, plan);
-  } catch(err) {
-    // Fallback plan if API fails
-    renderPlan(name, weight, height, bmi, tdee, goal, goalLabels, getFallbackPlan(experience, daysPerWeek, goal));
+    console.log("✅ SENT TO N8N");
+
+  } catch (err) {
+    console.error(err);
   }
 
-  document.getElementById('loadingState').classList.remove('visible');
   btn.disabled = false;
 }
 
