@@ -553,6 +553,34 @@ function toggleDay(header) {
   exDiv.classList.toggle('open');
   toggle.classList.toggle('open');
 }
+
+function getFallbackPlan(experience, days, goal) {
+  const splits = {
+    3: [
+      { day: 'Monday', focus: 'Full Body A', rest: false, exercises: [
+        {name:'Squat',sets:4,reps:'6-8',rest_sec:180,note:'Push through your whole foot'},
+        {name:'Bench Press',sets:4,reps:'6-8',rest_sec:120,note:'Keep shoulders back'},
+        {name:'Dumbbell Rows',sets:3,reps:'8-10',rest_sec:90,note:'Elbow to hip, not ceiling'},
+        {name:'Overhead Press',sets:3,reps:'8-10',rest_sec:90,note:'Keep your core tight'},
+      ]},
+      { day: 'Tuesday', focus: 'Rest', rest: true },
+      { day: 'Wednesday', focus: 'Rest', rest: true },
+      { day: 'Thursday', focus: 'Full Body B', rest: false, exercises: [
+        {name:'Deadlift',sets:4,reps:'4-6',rest_sec:180,note:'Bar stays on shins'},
+        {name:'Incline Dumbbell Press',sets:3,reps:'8-12',rest_sec:90,note:'30° angle only'},
+        {name:'Pull-Up',sets:3,reps:'Max',rest_sec:120,note:'Straight arms at the bottom'},
+        {name:'Lateral Raises',sets:4,reps:'15-20',rest_sec:60,note:'Lead with elbows'},
+      ]},
+      { day: 'Friday', focus: 'Rest', rest: true },
+      { day: 'Saturday', focus: 'Full Body C', rest: false, exercises: [
+        {name:'Romanian Deadlift',sets:4,reps:'10-12',rest_sec:90,note:'Hip hinge, not squat'},
+        {name:'Barbell Curl',sets:3,reps:'10-12',rest_sec:60,note:'Elbows pinned to sides'},
+        {name:'Tricep Dips',sets:3,reps:'8-12',rest_sec:90,note:'Full depth'},
+        {name:'Plank',sets:3,reps:'45s',rest_sec:60,note:'Keep hips level'},
+      ]},
+      { day: 'Sunday', focus: 'Rest', rest: true },
+    ]
+  };
   return {
     bmi_category: 'Normal', weekly_calories: 2400, protein_g: 160, sessions_per_week: days,
     program_type: days <= 3 ? 'Full Body Plan' : 'Upper and Lower Plan',
