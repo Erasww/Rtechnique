@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lateral raises Rep Check</title>
+    <title>Bench Rep Check</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -87,41 +87,27 @@ const feedback = document.getElementById("feedback");
 const startButton = document.getElementById("startButton");
 const stopButton = document.getElementById("stopButton");
 let camera = null;
-let pose = null;
-if (typeof Pose === "undefined" || typeof Camera === "undefined") {
-  feedback.innerText = "Camera tools did not load. Check your internet.";
-  startButton.disabled = true;
-  stopButton.disabled = true;
-} else {
-  pose = new Pose({
-    locateFile: (file) =>
-      `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
-  });
 
-  pose.setOptions({
-    modelComplexity: 1,
-    smoothLandmarks: true,
-    enableSegmentation: false,
-    minDetectionConfidence: 0.5,
-    minTrackingConfidence: 0.5
-  });
+const pose = new Pose({
+  locateFile: (file) =>
+    `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+});
 
-  pose.onResults(onResults);
-}
+pose.setOptions({
+  modelComplexity: 1,
+  smoothLandmarks: true,
+  enableSegmentation: false,
+  minDetectionConfidence: 0.5,
+  minTrackingConfidence: 0.5
+});
+
+pose.onResults(onResults);
 
 function startCamera() {
-  if (!pose) {
-    feedback.innerText = "Camera tools did not load. Check your internet.";
-    return;
-  }
-
   feedback.innerText = "Starting camera...";
   startButton.disabled = true;
   stopButton.disabled = false;
 
-  if (camera) {
-    camera.stop();
-  }
   camera = new Camera(video, {
     onFrame: async () => {
       await pose.send({ image: video });
@@ -152,10 +138,6 @@ function stopCamera() {
   stopButton.disabled = true;
   feedback.innerText = `Stopped | Reps: ${reps}`;
 }
-let stage = null; // down / up
-let reps = 0;
-
-let prevHipX = null;
 
 function calculateAngle(a, b, c) {
   const ab = [a.x - b.x, a.y - b.y];
@@ -165,37 +147,42 @@ function calculateAngle(a, b, c) {
   const magAB = Math.sqrt(ab[0]**2 + ab[1]**2);
   const magCB = Math.sqrt(cb[0]**2 + cb[1]**2);
 
-  const angle = Math.acos(dot / (magAB * magCB));
+  if (magAB === 0 || magCB === 0) return 0;
+
+  const cosine = Math.max(-1, Math.min(1, dot / (magAB * magCB)));
+  const angle = Math.acos(cosine);
   return angle * (180 / Math.PI);
 }
 
-
-const TOP_BACK_ANGLE = 160;
-const BOTTOM_BACK_ANGLE = 115;
-const MIN_TOP_KNEE_ANGLE = 140;
+const TOP_ANGLE = 155;
+const BOTTOM_ANGLE = 85;
 const MIN_VISIBILITY = 0.55;
 const SMOOTHING = 0.18;
 const REQUIRED_FRAMES = 4;
 const REP_COOLDOWN_MS = 900;
 
-let smoothBackAngle = null;
-let smoothKneeAngle = null;
+let stage = "top";
+let reps = 0;
+let smoothAngle = null;
 let stickyMessage = "";
 let stickyMessageUntil = 0;
 let topFrames = 0;
 let bottomFrames = 0;
 let lastRepTime = 0;
+let lowestAngleThisRep = 180;
 
 function isVisible(...points) {
   return points.every((point) => (point.visibility ?? 1) >= MIN_VISIBILITY);
 }
 
-function updateSmoothAngle(currentValue, newValue) {
-  if (currentValue === null) {
-    return newValue;
+function updateSmoothAngle(angle) {
+  if (smoothAngle === null) {
+    smoothAngle = angle;
+  } else {
+    smoothAngle = smoothAngle + (angle - smoothAngle) * SMOOTHING;
   }
 
-  return currentValue + (newValue - currentValue) * SMOOTHING;
+  return smoothAngle;
 }
 
 function showMessage(message, duration = 1200) {
@@ -203,96 +190,94 @@ function showMessage(message, duration = 1200) {
   stickyMessageUntil = Date.now() + duration;
 }
 
-function handleLateralRaise(lm) {
-  const shoulder = lm[12];
-  const elbow = lm[14];
-  const wrist = lm[16];
-  const hip = lm[24];
-
-  // Arm angle relative to body (vertical reference)
-  const verticalRef = { x: shoulder.x, y: shoulder.y + 0.2 };
-
-  const armAngle = calculateAngle(verticalRef, shoulder, wrist);
-  const elbowAngle = calculateAngle(shoulder, elbow, wrist);
-
-  let message = "";
-
-  if (!stage) stage = "down";
-
-  // --- REP LOGIC (stable) ---
-  if (armAngle > 70 && stage === "down") {
-    stage = "up";
-  }
-
-  if (armAngle < 30 && stage === "up") {
-    stage = "down";
-
-    const now = Date.now();
-    if (now - lastRepTime > REP_COOLDOWN_MS) {
-      reps++;
-      lastRepTime = now;
-      return "Good rep ✅";
-    }
-  }
-
-  // --- FORM CHECKS ---
-
-  // 1. NOT HIGH ENOUGH
-  if (armAngle < 60 && stage === "up") {
-    message = "Raise higher";
-  }
-
-  // 2. TOO HIGH
-  if (armAngle > 110) {
-    message = "Too high ⚠️";
-  }
-
-  // 3. LOCKED ELBOW
-  if (elbowAngle > 170) {
-    message = "Slight bend in elbows";
-  }
-
-  // 4. BODY SWING (important)
-  if (prevHipX !== null) {
-    const swing = Math.abs(hip.x - prevHipX);
-
-    if (swing > 0.015) {
-      message = "Stop swinging ❌";
-    }
-  }
-
-  prevHipX = hip.x;
-
-  return message || "Control movement";
-}
-
 function onResults(results) {
-  if (!results.poseLandmarks) return;
-
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-
+  canvas.width = video.videoWidth || 640;
+  canvas.height = video.videoHeight || 480;
   ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+
+  if (!results.poseLandmarks) {
+    topFrames = 0;
+    bottomFrames = 0;
+    feedback.innerText = `Reps: ${reps} | Move into the camera view`;
+    return;
+  }
 
   const lm = results.poseLandmarks;
 
-  // draw keypoints
-  lm.forEach(point => {
-    ctx.beginPath();
-    ctx.arc(point.x * canvas.width, point.y * canvas.height, 5, 0, 2 * Math.PI);
-    ctx.fillStyle = "lime";
-    ctx.fill();
-  });
+  // Right arm
+  const shoulder = lm[12];
+  const elbow = lm[14];
+  const wrist = lm[16];
 
-  const message = handleLateralRaise(lm);
+  if (!isVisible(shoulder, elbow, wrist)) {
+    topFrames = 0;
+    bottomFrames = 0;
+    feedback.innerText = `Reps: ${reps} | Show your full right arm`;
+    return;
+  }
 
-  feedback.innerText = `Reps: ${reps} | ${message}`;
+  const angle = updateSmoothAngle(calculateAngle(shoulder, elbow, wrist));
+  const angleText = Math.round(angle);
+  const now = Date.now();
+
+  let message = "Ready";
+
+  if (angle > TOP_ANGLE) {
+    topFrames++;
+  } else {
+    topFrames = 0;
+  }
+
+  if (angle < BOTTOM_ANGLE) {
+    bottomFrames++;
+  } else {
+    bottomFrames = 0;
+  }
+
+  if (stage === "top") {
+    lowestAngleThisRep = 180;
+
+    if (bottomFrames >= REQUIRED_FRAMES) {
+      stage = "bottom";
+      lowestAngleThisRep = angle;
+      topFrames = 0;
+      showMessage("Now press up");
+    } else if (angle < TOP_ANGLE) {
+      message = "Go lower";
+    } else {
+      message = "Start next rep";
+    }
+  }
+
+  if (stage === "bottom") {
+    lowestAngleThisRep = Math.min(lowestAngleThisRep, angle);
+
+    if (topFrames >= REQUIRED_FRAMES && now - lastRepTime > REP_COOLDOWN_MS) {
+      stage = "top";
+      reps++;
+      lastRepTime = now;
+      bottomFrames = 0;
+      showMessage("Good rep", 1800);
+    } else if (angle < 55) {
+      showMessage("Too low. Protect your shoulder", 1800);
+    } else if (lowestAngleThisRep > BOTTOM_ANGLE) {
+      message = "Go lower";
+    } else {
+      message = "Press up";
+    }
+  }
+
+  if (Date.now() < stickyMessageUntil) {
+    message = stickyMessage;
+  }
+
+  feedback.innerText = `Reps: ${reps} | Angle: ${angleText} | ${message}`;
 }
 
 startButton.addEventListener("click", startCamera);
 stopButton.addEventListener("click", stopCamera);
-  if (stopCamera) {
-    sendSetToN8N("lateral_raises", reps, formScore);
+if (stopCamera) {
+    sendSetToN8N("bench_press", reps, formScore);
   }
 </script>
 </body>
