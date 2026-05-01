@@ -291,6 +291,9 @@ function onResults(results) {
 
 startButton.addEventListener("click", startCamera);
 stopButton.addEventListener("click", stopCamera);
+  if (stopCamera) {
+    sendSetToN8N("lateral_raises", reps, formScore);
+  }
 </script>
 </body>
 </html>
