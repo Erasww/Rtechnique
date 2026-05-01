@@ -3,6 +3,7 @@ const exercises = [
   {
     id: 1, name: "Bench Press", category: "chest", difficulty: "intermediate",
     video: "SCVCLChPQFY",
+    formCheck: "techniq.html",
     equipment: "Barbell", primaryMuscles: ["Chest"],
     secondaryMuscles: ["Front Shoulder", "Triceps"],
     desc: "A strong chest exercise. It helps your chest, arms, and shoulders.",
@@ -361,6 +362,11 @@ function openModal(id) {
       </div>
       <h2 class="modal-title">${ex.name}</h2>
       <p style="font-size:14px;color:var(--muted)">${ex.equipment} — <em style="color:var(--text)">${ex.desc}</em></p>
+      ${ex.formCheck ? `
+        <button class="modal-form-check" onclick="window.location.href='${ex.formCheck}'">
+          Open Camera Form Check
+        </button>
+      ` : ''}
     </div>
     ${ex.video ? `
     <div class="modal-video-wrap">

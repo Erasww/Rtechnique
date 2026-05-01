@@ -332,6 +332,24 @@
     font-size: 52px; letter-spacing: 2px;
     line-height: 1; margin-bottom: 16px;
   }
+  .modal-form-check {
+    background: var(--accent);
+    color: var(--black);
+    border: none;
+    padding: 12px 20px;
+    margin-top: 22px;
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: transform .15s, box-shadow .2s;
+  }
+  .modal-form-check:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 24px rgba(249,115,22,.25);
+  }
   .modal-meta { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
   .modal-body { padding: 40px 48px; }
   .modal-section { margin-bottom: 36px; }
