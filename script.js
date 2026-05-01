@@ -187,6 +187,7 @@ const exercises = [
   {
     id: 8, name: "Lateral Raises", category: "shoulders", difficulty: "beginner",
     video: "3VcKaXpzqRo",
+    formCheck: "lateral_raises.html",
     equipment: "Dumbbell", primaryMuscles: ["Side Shoulder"],
     secondaryMuscles: ["Front Shoulder", "Small Shoulder Muscle"],
     desc: "A shoulder exercise. Use light weight and good control.",
