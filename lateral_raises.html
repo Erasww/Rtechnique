@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lateral raises Rep Check</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 24px;
+            background: #fff4ed;
+            color: #2a0f0a;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        video {
+            display: none;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            max-width: 960px;
+            aspect-ratio: 4 / 3;
+            background: #111;
+            border: 2px solid #f97316;
+            margin-bottom: 16px;
+        }
+
+        #feedback {
+            width: 100%;
+            max-width: 960px;
+            padding: 14px 16px;
+            margin-bottom: 16px;
+            background: #ffffff;
+            border: 1px solid #f7c8a9;
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .controls {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        button {
+            background: #dc2626;
+            color: #ffffff;
+            border: 0;
+            padding: 12px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #f97316;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <video id="webcam" autoplay playsinline></video>
+    <canvas id="output"></canvas>
+
+    <div id="feedback">Waiting...</div>
+    <div class="controls">
+        <button id="startButton" type="button">Start</button>
+        <button id="stopButton" type="button" disabled>Stop</button>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script>
+const video = document.getElementById("webcam");
+const canvas = document.getElementById("output");
+const ctx = canvas.getContext("2d");
+const feedback = document.getElementById("feedback");
+const startButton = document.getElementById("startButton");
+const stopButton = document.getElementById("stopButton");
+let camera = null;
+let pose = null;
+if (typeof Pose === "undefined" || typeof Camera === "undefined") {
+  feedback.innerText = "Camera tools did not load. Check your internet.";
+  startButton.disabled = true;
+  stopButton.disabled = true;
+} else {
+  pose = new Pose({
+    locateFile: (file) =>
+      `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+  });
+
+  pose.setOptions({
+    modelComplexity: 1,
+    smoothLandmarks: true,
+    enableSegmentation: false,
+    minDetectionConfidence: 0.5,
+    minTrackingConfidence: 0.5
+  });
+
+  pose.onResults(onResults);
+}
+
+function startCamera() {
+  if (!pose) {
+    feedback.innerText = "Camera tools did not load. Check your internet.";
+    return;
+  }
+
+  feedback.innerText = "Starting camera...";
+  startButton.disabled = true;
+  stopButton.disabled = false;
+
+  if (camera) {
+    camera.stop();
+  }
+  camera = new Camera(video, {
+    onFrame: async () => {
+      await pose.send({ image: video });
+    },
+    width: 960,
+    height: 720
+  });
+
+  camera.start().catch(() => {
+    feedback.innerText = "Camera did not start. Please allow camera access.";
+    startButton.disabled = false;
+    stopButton.disabled = true;
+  });
+}
+
+function stopCamera() {
+  if (camera) {
+    camera.stop();
+    camera = null;
+  }
+
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach((track) => track.stop());
+    video.srcObject = null;
+  }
+
+  startButton.disabled = false;
+  stopButton.disabled = true;
+  feedback.innerText = `Stopped | Reps: ${reps}`;
+}
+let stage = null; // down / up
+let reps = 0;
+
+let prevHipX = null;
+
+function calculateAngle(a, b, c) {
+  const ab = [a.x - b.x, a.y - b.y];
+  const cb = [c.x - b.x, c.y - b.y];
+
+  const dot = ab[0]*cb[0] + ab[1]*cb[1];
+  const magAB = Math.sqrt(ab[0]**2 + ab[1]**2);
+  const magCB = Math.sqrt(cb[0]**2 + cb[1]**2);
+
+  const angle = Math.acos(dot / (magAB * magCB));
+  return angle * (180 / Math.PI);
+}
+
+
+const TOP_BACK_ANGLE = 160;
+const BOTTOM_BACK_ANGLE = 115;
+const MIN_TOP_KNEE_ANGLE = 140;
+const MIN_VISIBILITY = 0.55;
+const SMOOTHING = 0.18;
+const REQUIRED_FRAMES = 4;
+const REP_COOLDOWN_MS = 900;
+
+let smoothBackAngle = null;
+let smoothKneeAngle = null;
+let stickyMessage = "";
+let stickyMessageUntil = 0;
+let topFrames = 0;
+let bottomFrames = 0;
+let lastRepTime = 0;
+
+function isVisible(...points) {
+  return points.every((point) => (point.visibility ?? 1) >= MIN_VISIBILITY);
+}
+
+function updateSmoothAngle(currentValue, newValue) {
+  if (currentValue === null) {
+    return newValue;
+  }
+
+  return currentValue + (newValue - currentValue) * SMOOTHING;
+}
+
+function showMessage(message, duration = 1200) {
+  stickyMessage = message;
+  stickyMessageUntil = Date.now() + duration;
+}
+
+function handleLateralRaise(lm) {
+  const shoulder = lm[12];
+  const elbow = lm[14];
+  const wrist = lm[16];
+  const hip = lm[24];
+
+  // Arm angle relative to body (vertical reference)
+  const verticalRef = { x: shoulder.x, y: shoulder.y + 0.2 };
+
+  const armAngle = calculateAngle(verticalRef, shoulder, wrist);
+  const elbowAngle = calculateAngle(shoulder, elbow, wrist);
+
+  let message = "";
+
+  if (!stage) stage = "down";
+
+  // --- REP LOGIC (stable) ---
+  if (armAngle > 70 && stage === "down") {
+    stage = "up";
+  }
+
+  if (armAngle < 30 && stage === "up") {
+    stage = "down";
+
+    const now = Date.now();
+    if (now - lastRepTime > REP_COOLDOWN_MS) {
+      reps++;
+      lastRepTime = now;
+      return "Good rep ✅";
+    }
+  }
+
+  // --- FORM CHECKS ---
+
+  // 1. NOT HIGH ENOUGH
+  if (armAngle < 60 && stage === "up") {
+    message = "Raise higher";
+  }
+
+  // 2. TOO HIGH
+  if (armAngle > 110) {
+    message = "Too high ⚠️";
+  }
+
+  // 3. LOCKED ELBOW
+  if (elbowAngle > 170) {
+    message = "Slight bend in elbows";
+  }
+
+  // 4. BODY SWING (important)
+  if (prevHipX !== null) {
+    const swing = Math.abs(hip.x - prevHipX);
+
+    if (swing > 0.015) {
+      message = "Stop swinging ❌";
+    }
+  }
+
+  prevHipX = hip.x;
+
+  return message || "Control movement";
+}
+
+function onResults(results) {
+  if (!results.poseLandmarks) return;
+
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+
+  ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+
+  const lm = results.poseLandmarks;
+
+  // draw keypoints
+  lm.forEach(point => {
+    ctx.beginPath();
+    ctx.arc(point.x * canvas.width, point.y * canvas.height, 5, 0, 2 * Math.PI);
+    ctx.fillStyle = "lime";
+    ctx.fill();
+  });
+
+  const message = handleLateralRaise(lm);
+
+  feedback.innerText = `Reps: ${reps} | ${message}`;
+}
+
+startButton.addEventListener("click", startCamera);
+stopButton.addEventListener("click", stopCamera);
+</script>
+</body>
+</html>
