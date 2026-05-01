@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arm Rep Check</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 24px;
+            background: #fff4ed;
+            color: #2a0f0a;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        video {
+            display: none;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            max-width: 960px;
+            aspect-ratio: 4 / 3;
+            background: #111;
+            border: 2px solid #f97316;
+            margin-bottom: 16px;
+        }
+
+        #feedback {
+            width: 100%;
+            max-width: 960px;
+            padding: 14px 16px;
+            margin-bottom: 16px;
+            background: #ffffff;
+            border: 1px solid #f7c8a9;
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .controls {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        button {
+            background: #dc2626;
+            color: #ffffff;
+            border: 0;
+            padding: 12px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #f97316;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <video id="webcam" autoplay playsinline></video>
+    <canvas id="output"></canvas>
+
+    <div id="feedback">Waiting...</div>
+    <div class="controls">
+        <button id="startButton" type="button">Start</button>
+        <button id="stopButton" type="button" disabled>Stop</button>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script>
+const video = document.getElementById("webcam");
+const canvas = document.getElementById("output");
+const ctx = canvas.getContext("2d");
+const feedback = document.getElementById("feedback");
+const startButton = document.getElementById("startButton");
+const stopButton = document.getElementById("stopButton");
+let camera = null;
+
+const pose = new Pose({
+  locateFile: (file) =>
+    `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+});
+
+pose.setOptions({
+  modelComplexity: 1,
+  smoothLandmarks: true,
+  enableSegmentation: false,
+  minDetectionConfidence: 0.5,
+  minTrackingConfidence: 0.5
+});
+
+pose.onResults(onResults);
+
+function startCamera() {
+  feedback.innerText = "Starting camera...";
+  startButton.disabled = true;
+  stopButton.disabled = false;
+
+  camera = new Camera(video, {
+    onFrame: async () => {
+      await pose.send({ image: video });
+    },
+    width: 960,
+    height: 720
+  });
+
+  camera.start().catch(() => {
+    feedback.innerText = "Camera did not start. Please allow camera access.";
+    startButton.disabled = false;
+    stopButton.disabled = true;
+  });
+}
+
+function stopCamera() {
+  if (camera) {
+    camera.stop();
+    camera = null;
+  }
+
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach((track) => track.stop());
+    video.srcObject = null;
+  }
+
+  startButton.disabled = false;
+  stopButton.disabled = true;
+  feedback.innerText = `Stopped | Reps: ${reps}`;
+}
+
+function calculateAngle(a, b, c) {
+  const ab = [a.x - b.x, a.y - b.y];
+  const cb = [c.x - b.x, c.y - b.y];
+
+  const dot = ab[0]*cb[0] + ab[1]*cb[1];
+  const magAB = Math.sqrt(ab[0]**2 + ab[1]**2);
+  const magCB = Math.sqrt(cb[0]**2 + cb[1]**2);
+
+  if (magAB === 0 || magCB === 0) return 0;
+
+  const cosine = Math.max(-1, Math.min(1, dot / (magAB * magCB)));
+  const angle = Math.acos(cosine);
+  return angle * (180 / Math.PI);
+}
+
+const TOP_ANGLE = 155;
+const BOTTOM_ANGLE = 85;
+const MIN_VISIBILITY = 0.55;
+const SMOOTHING = 0.18;
+const REQUIRED_FRAMES = 4;
+const REP_COOLDOWN_MS = 900;
+
+let stage = "top";
+let reps = 0;
+let smoothAngle = null;
+let stickyMessage = "";
+let stickyMessageUntil = 0;
+let topFrames = 0;
+let bottomFrames = 0;
+let lastRepTime = 0;
+let lowestAngleThisRep = 180;
+
+function isVisible(...points) {
+  return points.every((point) => (point.visibility ?? 1) >= MIN_VISIBILITY);
+}
+
+function updateSmoothAngle(angle) {
+  if (smoothAngle === null) {
+    smoothAngle = angle;
+  } else {
+    smoothAngle = smoothAngle + (angle - smoothAngle) * SMOOTHING;
+  }
+
+  return smoothAngle;
+}
+
+function showMessage(message, duration = 1200) {
+  stickyMessage = message;
+  stickyMessageUntil = Date.now() + duration;
+}
+
+function onResults(results) {
+  canvas.width = video.videoWidth || 640;
+  canvas.height = video.videoHeight || 480;
+  ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+
+  if (!results.poseLandmarks) {
+    topFrames = 0;
+    bottomFrames = 0;
+    feedback.innerText = `Reps: ${reps} | Move into the camera view`;
+    return;
+  }
+
+  const lm = results.poseLandmarks;
+
+  // Right arm
+  const shoulder = lm[12];
+  const elbow = lm[14];
+  const wrist = lm[16];
+
+  if (!isVisible(shoulder, elbow, wrist)) {
+    topFrames = 0;
+    bottomFrames = 0;
+    feedback.innerText = `Reps: ${reps} | Show your full right arm`;
+    return;
+  }
+
+  const angle = updateSmoothAngle(calculateAngle(shoulder, elbow, wrist));
+  const angleText = Math.round(angle);
+  const now = Date.now();
+
+  let message = "Ready";
+
+  if (angle > TOP_ANGLE) {
+    topFrames++;
+  } else {
+    topFrames = 0;
+  }
+
+  if (angle < BOTTOM_ANGLE) {
+    bottomFrames++;
+  } else {
+    bottomFrames = 0;
+  }
+
+  if (stage === "top") {
+    lowestAngleThisRep = 180;
+
+    if (bottomFrames >= REQUIRED_FRAMES) {
+      stage = "bottom";
+      lowestAngleThisRep = angle;
+      topFrames = 0;
+      showMessage("Now press up");
+    } else if (angle < TOP_ANGLE) {
+      message = "Go lower";
+    } else {
+      message = "Start next rep";
+    }
+  }
+
+  if (stage === "bottom") {
+    lowestAngleThisRep = Math.min(lowestAngleThisRep, angle);
+
+    if (topFrames >= REQUIRED_FRAMES && now - lastRepTime > REP_COOLDOWN_MS) {
+      stage = "top";
+      reps++;
+      lastRepTime = now;
+      bottomFrames = 0;
+      showMessage("Good rep", 1800);
+    } else if (angle < 55) {
+      showMessage("Too low. Protect your shoulder", 1800);
+    } else if (lowestAngleThisRep > BOTTOM_ANGLE) {
+      message = "Go lower";
+    } else {
+      message = "Press up";
+    }
+  }
+
+  if (Date.now() < stickyMessageUntil) {
+    message = stickyMessage;
+  }
+
+  feedback.innerText = `Reps: ${reps} | Angle: ${angleText} | ${message}`;
+}
+
+startButton.addEventListener("click", startCamera);
+stopButton.addEventListener("click", stopCamera);
+</script>
+</body>
+</html>
