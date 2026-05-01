@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>FORMFORGE - Learn Gym Form</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet"/>
+<link href="style.css" rel = 'stylesheet'>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">R<span>Technique</span></div>
+  <div class="nav-links">
+    <a href="#exercises">Exercises</a>
+    <a href="#planner">My Plan</a>
+    <a href="#how">How It Works</a>
+  </div>
+  <button class="nav-cta" onclick="document.getElementById('planner').scrollIntoView({behavior:'smooth'})">
+    Get My Plan
+  </button>
+</nav>
+
+<!-- HERO -->
+<section id="hero">
+  <div class="hero-grid-bg"></div>
+  <div class="hero-left">
+    <div class="hero-tag">Smart Gym Training</div>
+    <h1 class="hero-headline">
+      LEARN<br>
+      YOUR<br>
+      <span class="accent">FORM.</span><br>
+      <span class="stroke">GET STRONG.</span>
+    </h1>
+    <p class="hero-sub">Learn how to do each exercise. Get a training plan for your body and your goal.</p>
+    <div class="hero-btns">
+      <button class="btn-primary" onclick="document.getElementById('exercises').scrollIntoView({behavior:'smooth'})">Browse Exercises</button>
+      <button class="btn-secondary" onclick="document.getElementById('planner').scrollIntoView({behavior:'smooth'})">Make My Plan</button>
+    </div>
+  </div>
+  <div class="hero-right">
+    <div class="hero-stats">
+      <div class="stat-card">
+        <div class="stat-num">48+</div>
+        <div class="stat-label">Easy exercise guides</div>
+        <div class="stat-desc">Simple steps and mistakes to avoid</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num">100%</div>
+        <div class="stat-label">Made for you</div>
+        <div class="stat-desc">Plans use your body info</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num">AI</div>
+        <div class="stat-label">Smart coaching</div>
+        <div class="stat-desc">More form help is coming soon</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how">
+  <div class="section-tag">The Plan</div>
+  <h2 class="section-title">HOW IT WORKS</h2>
+  <p class="section-sub">Four simple steps. No guessing. No lost time.</p>
+  <div class="steps-how">
+    <div class="step-card fade-in">
+      <div class="step-num">01</div>
+      <div class="step-title">ADD YOUR INFO</div>
+      <p class="step-desc">Enter your weight, height, age, and level. We use this to make your plan.</p>
+    </div>
+    <div class="step-card fade-in" style="transition-delay:.1s">
+      <div class="step-num">02</div>
+      <div class="step-title">SET YOUR GOAL</div>
+      <p class="step-desc">Choose muscle gain, fat loss, or fitness. Each goal needs a different plan.</p>
+    </div>
+    <div class="step-card fade-in" style="transition-delay:.2s">
+      <div class="step-num">03</div>
+      <div class="step-title">GET YOUR PLAN</div>
+      <p class="step-desc">Get a weekly plan with exercises, sets, reps, and rest time.</p>
+    </div>
+    <div class="step-card fade-in" style="transition-delay:.3s">
+      <div class="step-num">04</div>
+      <div class="step-title">LEARN THE FORM</div>
+      <p class="step-desc">Open any exercise to see easy steps, tips, and common mistakes.</p>
+    </div>
+  </div>
+</section>
+
+<!-- EXERCISES -->
+<section id="exercises">
+  <div class="section-tag">Exercise List</div>
+  <h2 class="section-title">LEARN THE MOVES</h2>
+  <p class="section-sub">Click any exercise to see simple steps, tips, and mistakes to avoid.</p>
+  
+  <div class="muscle-filters">
+    <button class="filter-btn active" data-filter="all">All Muscles</button>
+    <button class="filter-btn" data-filter="chest">Chest</button>
+    <button class="filter-btn" data-filter="back">Back</button>
+    <button class="filter-btn" data-filter="legs">Legs</button>
+    <button class="filter-btn" data-filter="shoulders">Shoulders</button>
+    <button class="filter-btn" data-filter="arms">Arms</button>
+    <button class="filter-btn" data-filter="core">Core</button>
+  </div>
+
+  <div class="exercise-grid" id="exerciseGrid"></div>
+</section>
+
+<!-- PLANNER -->
+<section id="planner">
+  <div class="section-tag">Plan Maker</div>
+  <h2 class="section-title">YOUR PERSONAL PLAN</h2>
+  <p class="section-sub">Enter your info. We will make a weekly gym plan for you.</p>
+
+  <div class="planner-layout">
+    <div class="planner-form">
+      <div class="form-title">MAKE YOUR PLAN</div>
+      <p class="form-sub">Your info helps us make a better plan</p>
+
+      <div class="form-group">
+        <label class="form-label">Your Name</label>
+        <input type="text" class="form-input" id="userName" placeholder="e.g. Alex">
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Weight (kg)</label>
+          <input type="number" class="form-input" id="weight" placeholder="75" min="30" max="250">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Height (cm)</label>
+          <input type="number" class="form-input" id="height" placeholder="178" min="100" max="250">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Age</label>
+          <input type="number" class="form-input" id="age" placeholder="25" min="14" max="90">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Gender</label>
+          <select class="form-select" id="gender">
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Gym Level</label>
+        <select class="form-select" id="experience">
+          <option value="beginner">Beginner (0-6 months)</option>
+          <option value="intermediate">Middle (6 months - 2 years)</option>
+          <option value="advanced">Advanced (2+ years)</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Days each week</label>
+        <select class="form-select" id="daysPerWeek">
+          <option value="3">3 days</option>
+          <option value="4" selected>4 days</option>
+          <option value="5">5 days</option>
+          <option value="6">6 days</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Main Goal</label>
+        <div class="goal-grid">
+          <label class="goal-option">
+            <input type="radio" name="goal" value="muscle" checked>
+            <div class="goal-label">
+              <span class="goal-icon">💪</span>
+              <span class="goal-text">Build Muscle</span>
+            </div>
+          </label>
+          <label class="goal-option">
+            <input type="radio" name="goal" value="fat_loss">
+            <div class="goal-label">
+              <span class="goal-icon">🔥</span>
+              <span class="goal-text">Lose Fat</span>
+            </div>
+          </label>
+          <label class="goal-option">
+            <input type="radio" name="goal" value="endurance">
+            <div class="goal-label">
+              <span class="goal-icon">⚡</span>
+              <span class="goal-text">Get Fit</span>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <button class="submit-btn" id="generateBtn" onclick="generatePlan()">
+        MAKE MY TRAINING PLAN
+      </button>
+    </div>
+
+    <div class="plan-output">
+      <div class="plan-placeholder" id="planPlaceholder">
+        <div class="plan-placeholder-icon">PLAN</div>
+        <p class="plan-placeholder-text">Fill in your info and click the button.<br>Your plan will show here.</p>
+      </div>
+      <div class="loading-state" id="loadingState">
+        <div class="loader"></div>
+        <p class="loading-text">Making your plan...</p>
+      </div>
+      <div class="plan-result" id="planResult"></div>
+    </div>
+  </div>
+</section>
+
+<!-- EXERCISE MODAL -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+  <div class="modal" id="modal">
+    <button class="modal-close" onclick="closeModalDirect()">✕</button>
+    <div id="modalContent"></div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-top">
+    <div>
+      <div class="footer-logo">R<span>Technique</span></div>
+      <p class="footer-tagline">Learn good form. Build your body.</p>
+    </div>
+    <div style="display:flex;gap:60px;">
+      <div>
+        <p style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:16px;">Library</p>
+        <p style="font-size:14px;color:var(--text);margin-bottom:8px;cursor:pointer;" onclick="document.getElementById('exercises').scrollIntoView({behavior:'smooth'})">Exercises</p>
+        <p style="font-size:14px;color:var(--muted);cursor:pointer;" onclick="document.getElementById('planner').scrollIntoView({behavior:'smooth'})">My Plan</p>
+      </div>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>©️ 2026 Rtechnique. Built for gym training.</span>
+  </div>
+</footer>
+<script src="script.js"></script>
+</body>
+</html>
