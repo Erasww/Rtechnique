@@ -3,6 +3,7 @@ const exercises = [
   {
     id: 1, name: "Bench Press", category: "chest", difficulty: "intermediate",
     video: "SCVCLChPQFY",
+    formCheck: "techniq.html",
     equipment: "Barbell", primaryMuscles: ["Chest"],
     secondaryMuscles: ["Front Shoulder", "Triceps"],
     desc: "A strong chest exercise. It helps your chest, arms, and shoulders.",
@@ -186,6 +187,7 @@ const exercises = [
   {
     id: 8, name: "Lateral Raises", category: "shoulders", difficulty: "beginner",
     video: "3VcKaXpzqRo",
+    formCheck: "lateral_raises.html",
     equipment: "Dumbbell", primaryMuscles: ["Side Shoulder"],
     secondaryMuscles: ["Front Shoulder", "Small Shoulder Muscle"],
     desc: "A shoulder exercise. Use light weight and good control.",
@@ -212,6 +214,7 @@ const exercises = [
   {
     id: 9, name: "Barbell Curl", category: "arms", difficulty: "beginner",
     video: "kwG2ipFRgfo",
+    formCheck: "barbell_curl.html",
     equipment: "Barbell", primaryMuscles: ["Biceps"],
     secondaryMuscles: ["Forearms", "Lower Arm"],
     desc: "A simple arm exercise. It helps build your biceps.",
@@ -361,6 +364,11 @@ function openModal(id) {
       </div>
       <h2 class="modal-title">${ex.name}</h2>
       <p style="font-size:14px;color:var(--muted)">${ex.equipment} — <em style="color:var(--text)">${ex.desc}</em></p>
+      ${ex.formCheck ? `
+        <button class="modal-form-check" onclick="window.location.href='${ex.formCheck}'">
+          Open Camera Form Check
+        </button>
+      ` : ''}
     </div>
     ${ex.video ? `
     <div class="modal-video-wrap">
@@ -427,6 +435,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModalDi
 // ── PLAN GENERATION ──
 async function generatePlan() {
   const name = document.getElementById('userName').value.trim() || 'Athlete';
+  const email = document.getElementById("email").value;
   const weight = parseFloat(document.getElementById('weight').value);
   const height = parseFloat(document.getElementById('height').value);
   const age = parseInt(document.getElementById('age').value);
@@ -436,80 +445,40 @@ async function generatePlan() {
   const goal = document.querySelector('input[name="goal"]:checked').value;
 
   if (!weight || !height || !age) {
-    alert('Please fill in your weight, height, and age.');
+    alert('Fill all fields');
     return;
   }
 
   const btn = document.getElementById('generateBtn');
   btn.disabled = true;
-  document.getElementById('planPlaceholder').style.display = 'none';
-  document.getElementById('planResult').classList.remove('visible');
-  document.getElementById('loadingState').classList.add('visible');
-
-  const bmi = (weight / ((height/100) ** 2)).toFixed(1);
-  let bmrBase = gender === 'male'
-    ? 88.36 + (13.4 * weight) + (4.8 * height) - (5.7 * age)
-    : 447.6 + (9.2 * weight) + (3.1 * height) - (4.3 * age);
-  const tdee = Math.round(bmrBase * 1.55);
-  
-  const goalLabels = { muscle: 'Build Muscle', fat_loss: 'Lose Fat', endurance: 'Get Fit' };
-
-  const prompt = `You are a gym coach. Create a clear gym training plan. Use simple A2-B1 English. Use short sentences and common words.
-
-ATHLETE PROFILE:
-- Name: ${name}
-- Weight: ${weight}kg, Height: ${height}cm, Age: ${age}
-- Gender: ${gender}
-- BMI: ${bmi}
-- Estimated TDEE: ${tdee} kcal/day
-- Experience: ${experience}
-- Goal: ${goalLabels[goal]}
-- Days/week: ${daysPerWeek}
-
-Answer ONLY with a JSON object (no markdown, no backticks) with this exact structure:
-{
-  "bmi_category": "string",
-  "weekly_calories": number,
-  "protein_g": number,
-  "sessions_per_week": number,
-  "program_type": "string (e.g. Upper and Lower Plan)",
-  "coach_note": "2 short simple sentences for the athlete",
-  "weekly_plan": [
-    {
-      "day": "Monday",
-      "focus": "e.g. Upper Body Push",
-      "rest": false,
-      "exercises": [
-        {"name": "Bench Press", "sets": 4, "reps": "6-8", "rest_sec": 120, "note": "brief form cue"}
-      ]
-    }
-  ]
-}
-
-Include all ${daysPerWeek} training days plus rest days to fill 7 days. Make the plan good for a ${experience} with the goal of ${goalLabels[goal]}. Notes must use easy A2-B1 words.`;
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    // 👉 STEP 1: generate fake plan (or your AI plan)
+    const plan = getFallbackPlan(experience, daysPerWeek, goal);
+
+    // 👉 STEP 2: render UI FIRST
+    renderPlan(name, weight, height, "ok", 2000, goal, {}, plan);
+
+    // 👉 STEP 3: send to n8n AFTER plan exists
+    await fetch("https://yerasamb.app.n8n.cloud/webhook/create-plan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1000,
-        messages: [{ role: "user", content: prompt }]
+        name,
+        email,
+        goal,
+        level: experience,
+        days_per_week: daysPerWeek,
+        weekly_plan: plan.weekly_plan
       })
     });
 
-    const data = await response.json();
-    const text = data.content.map(i => i.text || '').join('');
-    const clean = text.replace(/```json|```/g, '').trim();
-    const plan = JSON.parse(clean);
-    renderPlan(name, weight, height, bmi, tdee, goal, goalLabels, plan);
-  } catch(err) {
-    // Fallback plan if API fails
-    renderPlan(name, weight, height, bmi, tdee, goal, goalLabels, getFallbackPlan(experience, daysPerWeek, goal));
+    console.log("✅ SENT TO N8N");
+
+  } catch (err) {
+    console.error(err);
   }
 
-  document.getElementById('loadingState').classList.remove('visible');
   btn.disabled = false;
 }
 
@@ -584,34 +553,6 @@ function toggleDay(header) {
   exDiv.classList.toggle('open');
   toggle.classList.toggle('open');
 }
-
-function getFallbackPlan(experience, days, goal) {
-  const splits = {
-    3: [
-      { day: 'Monday', focus: 'Full Body A', rest: false, exercises: [
-        {name:'Squat',sets:4,reps:'6-8',rest_sec:180,note:'Push through your whole foot'},
-        {name:'Bench Press',sets:4,reps:'6-8',rest_sec:120,note:'Keep shoulders back'},
-        {name:'Dumbbell Rows',sets:3,reps:'8-10',rest_sec:90,note:'Elbow to hip, not ceiling'},
-        {name:'Overhead Press',sets:3,reps:'8-10',rest_sec:90,note:'Keep your core tight'},
-      ]},
-      { day: 'Tuesday', focus: 'Rest', rest: true },
-      { day: 'Wednesday', focus: 'Rest', rest: true },
-      { day: 'Thursday', focus: 'Full Body B', rest: false, exercises: [
-        {name:'Deadlift',sets:4,reps:'4-6',rest_sec:180,note:'Bar stays on shins'},
-        {name:'Incline Dumbbell Press',sets:3,reps:'8-12',rest_sec:90,note:'30° angle only'},
-        {name:'Pull-Up',sets:3,reps:'Max',rest_sec:120,note:'Straight arms at the bottom'},
-        {name:'Lateral Raises',sets:4,reps:'15-20',rest_sec:60,note:'Lead with elbows'},
-      ]},
-      { day: 'Friday', focus: 'Rest', rest: true },
-      { day: 'Saturday', focus: 'Full Body C', rest: false, exercises: [
-        {name:'Romanian Deadlift',sets:4,reps:'10-12',rest_sec:90,note:'Hip hinge, not squat'},
-        {name:'Barbell Curl',sets:3,reps:'10-12',rest_sec:60,note:'Elbows pinned to sides'},
-        {name:'Tricep Dips',sets:3,reps:'8-12',rest_sec:90,note:'Full depth'},
-        {name:'Plank',sets:3,reps:'45s',rest_sec:60,note:'Keep hips level'},
-      ]},
-      { day: 'Sunday', focus: 'Rest', rest: true },
-    ]
-  };
   return {
     bmi_category: 'Normal', weekly_calories: 2400, protein_g: 160, sessions_per_week: days,
     program_type: days <= 3 ? 'Full Body Plan' : 'Upper and Lower Plan',
