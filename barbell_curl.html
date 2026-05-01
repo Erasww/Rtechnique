@@ -227,16 +227,38 @@ function onResults(results) {
 
   let message = "";
 
-  // --- REP LOGIC ---
+  // --- REP LOGIC (stable + anti-cheat) ---
   if (angle < 60 && stage === "down") {
     stage = "up";
-    message = "Top position 💪";
+    topFrames = 0;
+  }
+
+  if (stage === "up") {
+    if (angle < 60) topFrames++;
+
+    if (topFrames >= REQUIRED_FRAMES) {
+      showMessage("Top position 💪", 600);
+    }
   }
 
   if (angle > 150 && stage === "up") {
-    stage = "down";
-    reps++;
-    message = "Good rep ✅";
+    bottomFrames++;
+
+    if (bottomFrames >= REQUIRED_FRAMES) {
+      const now = Date.now();
+
+      if (now - lastRepTime > REP_COOLDOWN_MS) {
+        reps++;
+        lastRepTime = now;
+        showMessage("Good rep ✅", 1000);
+      }
+
+      stage = "down";
+      bottomFrames = 0;
+      topFrames = 0;
+    }
+  } else {
+    bottomFrames = 0;
   }
 
   // --- RANGE CHECK ---
@@ -252,20 +274,27 @@ function onResults(results) {
   if (prevElbowY !== null) {
     const movement = Math.abs(elbow.y - prevElbowY);
 
-    if (movement > 0.02) {
+    if (movement > 0.015) {
       message = "Keep elbow still ❌ (no swinging)";
     }
   }
 
   prevElbowY = elbow.y;
 
+  // --- STICKY MESSAGE (priority feedback) ---
+  if (Date.now() < stickyMessageUntil) {
+    message = stickyMessage;
+  }
+
   // --- DISPLAY ---
-  document.getElementById("feedback").innerText =
-    `Reps: ${reps} | ${message}`;
+  feedback.innerText = `Reps: ${reps} | ${message}`;
 }
 
 startButton.addEventListener("click", startCamera);
 stopButton.addEventListener("click", stopCamera);
+if (stopCamera) {
+    sendSetToN8N("barbel-curles", reps, formScore);
+  }
 </script>
 </body>
 </html>
