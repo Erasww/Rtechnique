@@ -213,6 +213,7 @@ const exercises = [
   {
     id: 9, name: "Barbell Curl", category: "arms", difficulty: "beginner",
     video: "kwG2ipFRgfo",
+    formCheck: "barbell_curl.html",
     equipment: "Barbell", primaryMuscles: ["Biceps"],
     secondaryMuscles: ["Forearms", "Lower Arm"],
     desc: "A simple arm exercise. It helps build your biceps.",
