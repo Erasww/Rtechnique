@@ -433,55 +433,29 @@ function closeModalDirect() {
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModalDirect(); });
 
 // ── PLAN GENERATION ──
-async function generatePlan() {
-  const name = document.getElementById('userName').value.trim() || 'Athlete';
-  const email = document.getElementById("email").value;
+async function generatePlan(){
+const name = document.getElementById('userName').value.trim() || 'Athlete';
   const weight = parseFloat(document.getElementById('weight').value);
   const height = parseFloat(document.getElementById('height').value);
   const age = parseInt(document.getElementById('age').value);
   const gender = document.getElementById('gender').value;
-  const experience = document.getElementById('experience').value;
+  const experience = document.getElementById('experience').value; // Gym Level
   const daysPerWeek = parseInt(document.getElementById('daysPerWeek').value);
   const goal = document.querySelector('input[name="goal"]:checked').value;
-
-  if (!weight || !height || !age) {
-    alert('Fill all fields');
-    return;
-  }
-
-  const btn = document.getElementById('generateBtn');
-  btn.disabled = true;
-
-  try {
-    // 👉 STEP 1: generate fake plan (or your AI plan)
-    const plan = getFallbackPlan(experience, daysPerWeek, goal);
-
-    // 👉 STEP 2: render UI FIRST
-    renderPlan(name, weight, height, "ok", 2000, goal, {}, plan);
-
-    // 👉 STEP 3: send to n8n AFTER plan exists
-    await fetch("https://yerasamb.app.n8n.cloud/webhook/create-plan", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name,
-        email,
-        goal,
-        level: experience,
-        days_per_week: daysPerWeek,
-        weekly_plan: plan.weekly_plan
-      })
-    });
-
-    console.log("✅ SENT TO N8N");
-
-  } catch (err) {
-    console.error(err);
-  }
-
-  btn.disabled = false;
+  const email = document.getElementById('email').value;
+// Google Sheets-ке деректерді жіберу (ЖАҢА)
+  sendDataToGoogleSheet({
+    name: name,
+    weight: weight,
+    height: height,
+    age: age,
+    gender: gender,
+    level: experience,
+    goal: goal,
+    email : email,
+    days: daysPerWeek
+  });
 }
-
 function renderPlan(name, weight, height, bmi, tdee, goal, goalLabels, plan) {
   const calTarget = goal === 'muscle' ? tdee + 300 : goal === 'fat_loss' ? tdee - 400 : tdee;
   const html = `
@@ -597,3 +571,20 @@ document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
 
 // ── INIT ──
 renderExercises();
+// Google Sheets-ке деректерді жіберу функциясы
+function sendDataToGoogleSheet(formData) {
+  const scriptURL = 'https://script.google.com/macros/s/AKfycbzGbTaPfw2Yl3P4WhoATVWexBM4fVY0mzC0sd4RxYWNn8cDRJ35aGKdh-sh-n86QJ1beA/exec'; // Google-дан алған URL-ді қойыңыз
+  
+  const data = new FormData();
+  for (const key in formData) {
+    data.append(key, formData[key]);
+  }
+
+  fetch(scriptURL, { 
+    method: 'POST', 
+    body: data,
+    mode: 'no-cors' // Қауіпсіздік үшін қажет болуы мүмкін
+  })
+  .then(() => console.log('Data sent to Google Sheets successfully!'))
+  .catch(error => console.error('Error sending data:', error));
+}
